@@ -172,6 +172,11 @@ class sync_planner():
                     count=0
                 count+=1
 
+                if(self.next_frame > 3000):
+                    sync_mode_on.start_sync_mode = False
+                    sync_mode_resp = sync_mode_srv(sync_mode_on)
+                    break
+
                 rate.sleep()
             except KeyboardInterrupt:
                 sync_mode_on.start_sync_mode = False
@@ -207,6 +212,7 @@ class sync_planner():
 
 if __name__ == '__main__':
     try:
-        synchronous_planner=sync_planner()
+        for i in range(100):
+            synchronous_planner=sync_planner()
     except rospy.ROSInterruptException:
         pass
