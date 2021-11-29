@@ -48,7 +48,7 @@ class test :
         y=self.status_msg.position.y
         z=self.status_msg.position.z
         distance=sqrt(pow(x-self.prev_x,2)+pow(y-self.prev_y,2))
-        if distance > 0.3:
+        if distance > 0.4:
             data='{0}\t{1}\t{2}\n'.format(x,y,z)
             self.f.write(data)
             self.prev_x=x

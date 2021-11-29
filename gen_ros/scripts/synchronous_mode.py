@@ -7,8 +7,8 @@ import numpy as np
 from nav_msgs.msg import Path,Odometry
 from std_msgs.msg import Float64,Int16,Float32MultiArray
 from geometry_msgs.msg import PoseStamped,Point
-from morai_msgs.msg import EgoVehicleStatus,CtrlCmd,GetTrafficLightStatus,SetTrafficLight, SyncModeCmd, SyncModeCmdResponse, WaitForTick, WaitForTickResponse, EventInfo
-from morai_msgs.srv import MoraiSyncModeCmdSrv ,MoraiWaitForTickSrv , MoraiEventCmdSrv ,MoraiScenarioLoadSrvRequest, MoraiScenarioLoadSrvResponse
+from morai_msgs.msg import EgoVehicleStatus,CtrlCmd,GetTrafficLightStatus,SetTrafficLight, SyncModeCmd, SyncModeCmdResponse, WaitForTick, WaitForTickResponse, EventInfo, SyncModeCtrlCmd , SyncModeResultResponse
+from morai_msgs.srv import MoraiSyncModeCmdSrv ,MoraiWaitForTickSrv , MoraiEventCmdSrv ,MoraiScenarioLoadSrvRequest, MoraiScenarioLoadSrvResponse, MoraiSyncModeCtrlCmdSrv
 from lib.utils import pathReader, findLocalPath,purePursuit,pidController,velocityPlanning
 import tf
 from math import cos,sin,sqrt,pow,atan2,pi
@@ -30,9 +30,11 @@ class sync_planner():
         # # service
         rospy.wait_for_service('/SyncModeCmd')
         rospy.wait_for_service('/SyncModeWaitForTick')
+        rospy.wait_for_service('/SyncModeCtrlCmd')
 
         sync_mode_srv = rospy.ServiceProxy('SyncModeCmd', MoraiSyncModeCmdSrv)
         tick_wait_srv = rospy.ServiceProxy('SyncModeWaitForTick', MoraiWaitForTickSrv)
+        ctr_cmd_srv = rospy.ServiceProxy('SyncModeCtrlCmd', MoraiSyncModeCtrlCmdSrv)
 
         #def
         self.global_path=path_reader.read_txt(self.path_name+".txt") ## 출력할 경로의 이름
@@ -41,13 +43,19 @@ class sync_planner():
         sync_mode_on = SyncModeCmd()
         sync_mode_on.user_id = "sync_master"
         sync_mode_on.start_sync_mode = True
+        sync_mode_on.time_step = 1000 # 20ms
+
+        # def ctrl_cmd service
+        ctrl_cmd = SyncModeCtrlCmd()
 
         print("Synchronous Mode ON")
         sync_mode_resp = sync_mode_srv(sync_mode_on)
 
+        next_frame = sync_mode_resp.response.frame + 1
+
         tick=WaitForTick()
         tick.user_id = sync_mode_resp.response.user_id
-        tick.frame = sync_mode_resp.response.frame
+        tick.frame = next_frame
 
         tick_resp = tick_wait_srv(tick)
         self.status_msg = tick_resp.response.vehicle_status
@@ -73,25 +81,35 @@ class sync_planner():
                 # pure pursuit control
                 pure_pursuit.getPath(local_path) ## pure_pursuit 알고리즘에 Local path 적용
                 pure_pursuit.getEgoStatus(self.status_msg) ## pure_pursuit 알고리즘에 차량의 status 적용
-                tick.command.steering=-pure_pursuit.steering_angle()/180*pi
+                ctrl_cmd.command.steering=-pure_pursuit.steering_angle()/180*pi
         
                 target_velocity = vel_profile[self.current_waypoint]
 
                 control_input=pid.pid(target_velocity,self.status_msg.velocity) ## 속도 제어를 위한 PID 적용 (target Velocity, Status Velocity)
 
+                ctrl_cmd.frame = next_frame + 1
+                ctrl_cmd.command.longlCmdType = 1
+
                 if control_input > 0 :
-                    tick.command.accel = control_input
-                    tick.command.brake = 0
+                    ctrl_cmd.command.accel = 0 # control_input
+                    ctrl_cmd.command.brake = 0
                 else :
-                    tick.command.accel = 0
-                    tick.command.brake = -control_input
+                    ctrl_cmd.command.accel = 0
+                    ctrl_cmd.command.brake = -control_input
 
 
                 local_path_pub.publish(local_path) ## Local Path 출력
                 odom_pub.publish(self.makeOdomMsg())
 
                 # Send Tick
+                ctrl_cmd_resp = ctr_cmd_srv(ctrl_cmd)
+                print(ctrl_cmd_resp.response.result)
+
+                tick.frame = 0 # next_frame +1 
+                next_frame += 1
+                print("Before time " ,time.time())
                 tick_resp = tick_wait_srv(tick)
+                print("After time " ,time.time())
                 self.status_msg = tick_resp.response.vehicle_status
                 self.tfBraodcaster()
 
@@ -101,6 +119,7 @@ class sync_planner():
                     count=0
                 count+=1
                 rate.sleep()
+                print(next_frame)
             except KeyboardInterrupt:
                 sync_mode_on.start_sync_mode = False
                 sync_mode_resp = sync_mode_srv(sync_mode_on)

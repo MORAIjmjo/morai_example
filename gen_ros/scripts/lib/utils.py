@@ -244,6 +244,8 @@ class cruiseControl: ## ACC(advanced cruise control) 적용 ##
                                     min_rel_distance=rel_distance
                                     self.traffic=[True,i]
 
+                        # print(traffic_sign)
+
                          
                     
 

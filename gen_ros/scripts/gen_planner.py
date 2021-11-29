@@ -7,7 +7,9 @@ import numpy as np
 from nav_msgs.msg import Path,Odometry
 from std_msgs.msg import Float64,Int16,Float32MultiArray
 from geometry_msgs.msg import PoseStamped,Point
-from morai_msgs.msg import EgoVehicleStatus,ObjectStatusList,CtrlCmd,GetTrafficLightStatus,SetTrafficLight
+from morai_msgs.msg import EgoVehicleStatus,ObjectStatusList,CtrlCmd,GetTrafficLightStatus,SetTrafficLight , MoraiTLIndex ,MoraiTLInfo
+
+from morai_msgs.srv import MoraiTLInfoSrv
 from lib.utils import pathReader, findLocalPath,purePursuit,pidController,velocityPlanning,vaildObject,cruiseControl
 import tf
 from math import cos,sin,sqrt,pow,atan2,pi
@@ -32,17 +34,26 @@ class gen_planner():
         #subscriber
         rospy.Subscriber("/Ego_topic", EgoVehicleStatus, self.statusCB) ## Vehicl Status Subscriber 
         rospy.Subscriber("/Object_topic", ObjectStatusList, self.objectInfoCB) ## Object information Subscriber
-        rospy.Subscriber("/GetTrafficLightStatus", GetTrafficLightStatus, self.getTL_callback) ## TrafficLight information Subscriber
         
+        # service
+
+        rospy.wait_for_service('/Morai_TLSrv')
+        self.tl_info_srv = rospy.ServiceProxy('Morai_TLSrv', MoraiTLInfoSrv)
+
         #def
         self.is_status=False ## 차량 상태 점검
         self.is_obj=False ## 장애물 상태 점검
         self.is_traffic=False ## 신호등 상태 점검
-        self.traffic_info = [[58.50 , 1180.41, 'C119BS010001'], ## TrafficLight information
-                             [85.61,1227.88 ,'C119BS010021'],
-                             [136.58,1351.98 ,'C119BS010025'],
-                             [141.02,1458.27 ,'C119BS010028'],
-                             [139.39,1596.44 ,'C119BS010033']]
+
+        if(self.path_name == "pangyo_1736"):
+            self.traffic_info = [[48.7231750488,-67.2655029297 ,'B1SA18BA000104'],
+                                [264.742156982,326.365142822 ,'B1SA18BA000176']]
+        else :
+            self.traffic_info = [[58.50 , 1180.41, 'C119BS010001'], ## TrafficLight information
+                                [85.61,1227.88 ,'C119BS010021'],
+                                [136.58,1351.98 ,'C119BS010025'],
+                                [141.02,1458.27 ,'C119BS010028'],
+                                [139.39,1596.44 ,'C119BS010033']]
 
 
 
@@ -70,6 +81,7 @@ class gen_planner():
                 local_path,self.current_waypoint=findLocalPath(self.global_path,self.status_msg)
                 self.vo.get_object(self.object_num,self.object_info[0],self.object_info[1],self.object_info[2],self.object_info[3])
                 global_obj,local_obj=self.vo.calc_vaild_obj([self.status_msg.position.x,self.status_msg.position.y,(self.status_msg.heading)/180*pi])
+                self.check_traffic()
                 if self.is_traffic == True: ## 신호등 상태 점검 
                     if self.traffic_control == "True": ## 신호등 신호 초록색으로 변경(True) or (False)
                         self.tl_msg.trafficLightStatus=16 
@@ -80,7 +92,7 @@ class gen_planner():
                         self.set_traffic_data.trafficLightStatus = 16 ## 16 = Green light
                         ## traffic_control ##
 
-                        traffic_pub.publish(self.set_traffic_data) ## 차량 신호 Green Light 변경
+                        # traffic_pub.publish(self.set_traffic_data) ## 차량 신호 Green Light 변경
                     self.cc.checkObject(local_path,global_obj,local_obj,[self.tl_msg.trafficLightIndex,self.tl_msg.trafficLightStatus]) 
                 else :
                     self.cc.checkObject(local_path,global_obj,local_obj)
@@ -102,6 +114,14 @@ class gen_planner():
                 else :
                     ctrl_msg.accel= 0
                     ctrl_msg.brake= -control_input
+
+                if target_velocity < 1 and self.status_msg.velocity.x < 1 :
+                    ctrl_msg.accel= 0
+                    ctrl_msg.brake= 1
+
+                if len(local_path.poses) < 15 :
+                    ctrl_msg.accel= 0
+                    ctrl_msg.brake= 1
 
 
                 local_path_pub.publish(local_path) ## Local Path 출력
@@ -173,10 +193,21 @@ class gen_planner():
         self.object_info=[object_type,object_pose_x,object_pose_y,object_velocity]
         self.is_obj=True
 
-    def getTL_callback(self,msg): ## TrafficLight information Subscriber
-        self.is_traffic=True
-        self.tl_msg=GetTrafficLightStatus()
-        self.tl_msg=msg
+    def calc_dist(self, tl):
+        return sqrt(pow(self.status_msg.position.x - tl[0] ,2) + pow(self.status_msg.position.y - tl[1] ,2) )
+    def check_traffic(self):
+        for tl in self.traffic_info:
+            if(self.calc_dist(tl) < 20):
+                req_idx = MoraiTLIndex()
+                req_idx.idx = tl[2]
+                tl_info_resp = self.tl_info_srv(req_idx)
+                self.tl_msg=GetTrafficLightStatus()
+                self.tl_msg.trafficLightIndex = tl_info_resp.response.idx
+                self.tl_msg.trafficLightStatus = tl_info_resp.response.status
+                rospy.loginfo(self.tl_msg)
+                self.is_traffic = True
+
+        # self.is_traffic = False
     
 if __name__ == '__main__':
     try:
