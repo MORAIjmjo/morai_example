@@ -7,14 +7,40 @@ import numpy as np
 from nav_msgs.msg import Path,Odometry
 from std_msgs.msg import Float64,Int16,Float32MultiArray
 from geometry_msgs.msg import PoseStamped,Point
-from morai_msgs.msg import EgoVehicleStatus,ObjectStatusList,CtrlCmd,GetTrafficLightStatus,SetTrafficLight
+from morai_msgs.msg import EgoVehicleStatus,ObjectStatusList,CtrlCmd,GetTrafficLightStatus,SetTrafficLight, EventInfo
+from morai_msgs.srv import MoraiEventCmdSrv
 from lib.utils import pathReader, findLocalPath,purePursuit,pidController,velocityPlanning,vaildObject,cruiseControl
 import tf
 from math import cos,sin,sqrt,pow,atan2,pi
+import datetime
+
+class DataTotxt:
+
+    def __init__(self, file_name, pkg_name):
+        rospack=rospkg.RosPack()
+        pkg_path=rospack.get_path(pkg_name)
+        full_path=pkg_path +'/scripts/data/'+file_name+'.txt'
+        self.f=open(full_path, 'w')
+        print("Write path : ", file_name)
+
+    def appendData(self , data):
+
+        self.f.write(data)
+
+    def closetxt(self):
+        self.f.close()
+
+
 
 class gen_planner():
     def __init__(self):
         rospy.init_node('gen_planner', anonymous=True)
+
+        # ### write data
+        # curr_date = datetime.datetime.now()
+        # file_name = "time_scale_2_pos" + str(curr_date.month) +str(curr_date.day) +str(curr_date.hour) +str(curr_date.minute)
+        # self.data_txt = DataTotxt(file_name, "method_ex") # "sensor_capture_data"
+
 
         arg = rospy.myargv(argv=sys.argv)
         self.path_name=arg[1]
@@ -38,11 +64,7 @@ class gen_planner():
         self.is_status=False ## 차량 상태 점검
         self.is_obj=False ## 장애물 상태 점검
         self.is_traffic=False ## 신호등 상태 점검
-        self.traffic_info = [[58.50 , 1180.41, 'C119BS010001'], ## TrafficLight information
-                             [85.61,1227.88 ,'C119BS010021'],
-                             [136.58,1351.98 ,'C119BS010025'],
-                             [141.02,1458.27 ,'C119BS010028'],
-                             [139.39,1596.44 ,'C119BS010033']]
+        self.traffic_info = []
 
 
 
@@ -58,40 +80,21 @@ class gen_planner():
         vel_planner=velocityPlanning(60/3.6,0.15) ## 속도 계획
         vel_profile=vel_planner.curveBasedVelocity(self.global_path,100)
 
-
         #time var
         count=0
-        rate = rospy.Rate(30) # 30hz
+        rate = rospy.Rate(50) # 30hz
 
         while not rospy.is_shutdown():
             if self.is_status==True and self.is_obj ==True:
                 
                 ## global_path와 차량의 status_msg를 이용해 현제 waypoint와 local_path를 생성
                 local_path,self.current_waypoint=findLocalPath(self.global_path,self.status_msg)
-                self.vo.get_object(self.object_num,self.object_info[0],self.object_info[1],self.object_info[2],self.object_info[3])
-                global_obj,local_obj=self.vo.calc_vaild_obj([self.status_msg.position.x,self.status_msg.position.y,(self.status_msg.heading)/180*pi])
-                if self.is_traffic == True: ## 신호등 상태 점검 
-                    if self.traffic_control == "True": ## 신호등 신호 초록색으로 변경(True) or (False)
-                        self.tl_msg.trafficLightStatus=16 
-
-                        ## traffic_control ##
-                        self.set_traffic_data= SetTrafficLight()
-                        self.set_traffic_data.trafficLightIndex = self.tl_msg.trafficLightIndex
-                        self.set_traffic_data.trafficLightStatus = 16 ## 16 = Green light
-                        ## traffic_control ##
-
-                        traffic_pub.publish(self.set_traffic_data) ## 차량 신호 Green Light 변경
-                    self.cc.checkObject(local_path,global_obj,local_obj,[self.tl_msg.trafficLightIndex,self.tl_msg.trafficLightStatus]) 
-                else :
-                    self.cc.checkObject(local_path,global_obj,local_obj)
                 # pure pursuit control
                 pure_pursuit.getPath(local_path) ## pure_pursuit 알고리즘에 Local path 적용
                 pure_pursuit.getEgoStatus(self.status_msg) ## pure_pursuit 알고리즘에 차량의 status 적용
                 ctrl_msg.steering=-pure_pursuit.steering_angle()/180*pi
-        
 
-                cc_vel = self.cc.acc(local_obj,self.status_msg.velocity.x,vel_profile[self.current_waypoint],self.status_msg.position) ## advanced cruise control 적용한 속도 계획
-                target_velocity = cc_vel
+                target_velocity =vel_profile[self.current_waypoint]
   
 
                 control_input=pid.pid(target_velocity,self.status_msg.velocity) ## 속도 제어를 위한 PID 적용 (target Velocity, Status Velocity)
@@ -103,6 +106,8 @@ class gen_planner():
                     ctrl_msg.accel= 0
                     ctrl_msg.brake= -control_input
 
+                # dt = '{0}\t{1}\n'.format(self.status_msg.position.x,self.status_msg.position.y)
+                # self.data_txt.appendData(dt)
 
                 local_path_pub.publish(local_path) ## Local Path 출력
                 ctrl_pub.publish(ctrl_msg) ## Vehicl Control 출력
@@ -111,6 +116,7 @@ class gen_planner():
             
                 if count==30 : ## global path 출력
                     global_path_pub.publish(self.global_path)
+
                     count=0
                 count+=1
                 rate.sleep()

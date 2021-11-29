@@ -405,7 +405,7 @@ class pidController : ## 속도 제어를 위한 PID 적용 ##
         self.p_gain=0.1
         self.i_gain=0.0
         self.d_gain=0.05
-        self.controlTime=0.033
+        self.controlTime=0.02
         self.prev_error=0
         self.i_control=0
 
