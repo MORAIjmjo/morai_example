@@ -7,9 +7,9 @@ import numpy as np
 from nav_msgs.msg import Path,Odometry
 from std_msgs.msg import Float64,Int16,Float32MultiArray
 from geometry_msgs.msg import PoseStamped,Point
-from morai_msgs.msg import EgoVehicleStatus,CtrlCmd,GetTrafficLightStatus,SetTrafficLight, SyncModeCmd, SyncModeCmdResponse, WaitForTick, WaitForTickResponse, EventInfo, SyncModeCtrlCmd
+from morai_msgs.msg import EgoVehicleStatus,CtrlCmd,GetTrafficLightStatus,SetTrafficLight, SyncModeCmd, SyncModeCmdResponse, WaitForTick, WaitForTickResponse, EventInfo, SyncModeCtrlCmd, SyncModeScenarioLoad
 from morai_msgs.msg import SyncModeSetGear
-from morai_msgs.srv import MoraiSyncModeCmdSrv ,MoraiWaitForTickSrv , MoraiEventCmdSrv ,MoraiScenarioLoadSrvRequest , MoraiSyncModeCtrlCmdSrv, MoraiSyncModeSetGearSrv
+from morai_msgs.srv import MoraiSyncModeCmdSrv ,MoraiWaitForTickSrv , MoraiEventCmdSrv ,MoraiScenarioLoadSrvRequest , MoraiSyncModeCtrlCmdSrv, MoraiSyncModeSetGearSrv, MoraiSyncModeSLSrv
 from lib.utils import pathReader, findLocalPath,purePursuit,pidController,velocityPlanning
 import tf
 from math import cos,sin,sqrt,pow,atan2,pi
@@ -61,11 +61,13 @@ class sync_planner():
         rospy.wait_for_service('/SyncModeWaitForTick')
         rospy.wait_for_service('/SyncModeCtrlCmd')
         rospy.wait_for_service('/SyncModeSetGear')
+        rospy.wait_for_service('/SyncModeScenarioLoad')
 
         sync_mode_srv = rospy.ServiceProxy('SyncModeCmd', MoraiSyncModeCmdSrv)
         tick_wait_srv = rospy.ServiceProxy('SyncModeWaitForTick', MoraiWaitForTickSrv)
         ctrl_cmd_srv = rospy.ServiceProxy('SyncModeCtrlCmd', MoraiSyncModeCtrlCmdSrv)
         set_gear_srv = rospy.ServiceProxy('SyncModeSetGear',MoraiSyncModeSetGearSrv)
+        scene_load_srv = rospy.ServiceProxy('SyncModeScenarioLoad',MoraiSyncModeSLSrv)
 
         #def
         self.global_path=path_reader.read_txt(self.path_name+".txt") ## 출력할 경로의 이름
@@ -82,6 +84,12 @@ class sync_planner():
         print("Synchronous Mode ON")
         sync_mode_resp = sync_mode_srv(sync_mode_on)
         self.next_frame = sync_mode_resp.response.frame + 1
+
+        scene_load_msg = SyncModeScenarioLoad()
+        scene_load_msg.frame = self.next_frame
+        scene_load_msg.file_name = "sync_test"
+        scene_load_msg.load_ego_vehicle_data = True
+        scene_load_resp = scene_load_srv(scene_load_msg)
 
         set_gear_cmd = SyncModeSetGear()
         set_gear_cmd.gear = 4
