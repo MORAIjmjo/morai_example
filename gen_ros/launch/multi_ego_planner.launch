@@ -1,0 +1,8 @@
+<launch>
+        <!-- args = "(추종할 경로 이름) (신호등 greenlight setting (True,False))" -->
+	<node pkg="gen_ros" type="op_3_ego_2_planner.py" name="ego_2_planner" args="3 False" output="screen" />
+    <node pkg="gen_ros" type="op_3_ego_3_planner.py" name="ego_3_planner" args="3 False" output="screen" />
+    <node pkg="gen_ros" type="map_viewer.py" name="map_viewer" args="R_KR_PR_Naverlabs_Pangyo" output="screen" />
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find gen_ros)/rviz/planner.rviz" />
+
+</launch>
