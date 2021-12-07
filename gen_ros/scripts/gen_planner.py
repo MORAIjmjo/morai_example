@@ -13,16 +13,29 @@ from morai_msgs.srv import MoraiTLInfoSrv
 from lib.utils import pathReader, findLocalPath,purePursuit,pidController,velocityPlanning,vaildObject,cruiseControl
 import tf
 from math import cos,sin,sqrt,pow,atan2,pi
-
+from global_path_planning import globalPathPlanning
 class gen_planner():
     def __init__(self):
         rospy.init_node('gen_planner', anonymous=True)
 
         arg = rospy.myargv(argv=sys.argv)
-        self.path_name=arg[1]
+        self.map_name = "R_KR_PR_Naverlabs_Pangyo"
+        self.op_case = arg[1]
         self.traffic_control=arg[2]
 
-        path_reader=pathReader('gen_ros') ## 경로 파일의 위치
+        if(self.op_case == "1" or self.op_case == "2"):
+            self.destination = Point(603.475036621,-328.100738525,-328.100738525)
+        elif(self.op_case == "5" or self.op_case == "4"):
+            self.destination =  Point(590.271972656, 413.530456543, 5.77461624146)# Point(-291.608154297, 600.307556152, 5.58355808258)
+            self.stop_over_point = [619.141784668, 323.986297607]
+            check_npc_link = "4169"
+        elif(self.op_case == "6" or self.op_case == "7"):
+            self.destination = Point(614.503662109, -12.0273742676, 0.753755569458)
+        elif(self.op_case == "8"):
+            self.destination = Point(615.366333008, -270.371154785, -2.64361953735)
+            self.stop_over_point = [615.672119141, -430.026550293]
+            check_npc_link = "5371"
+
         #publisher
         global_path_pub= rospy.Publisher('/global_path',Path, queue_size=1) ## global_path publisher
         local_path_pub= rospy.Publisher('/local_path',Path, queue_size=1) ## local_path publisher
@@ -34,7 +47,9 @@ class gen_planner():
         #subscriber
         rospy.Subscriber("/Ego_topic", EgoVehicleStatus, self.statusCB) ## Vehicl Status Subscriber 
         rospy.Subscriber("/Object_topic", ObjectStatusList, self.objectInfoCB) ## Object information Subscriber
+
         
+            
         # service
 
         rospy.wait_for_service('/Morai_TLSrv')
@@ -45,9 +60,10 @@ class gen_planner():
         self.is_obj=False ## 장애물 상태 점검
         self.is_traffic=False ## 신호등 상태 점검
 
-        if(self.path_name == "pangyo_1736"):
-            self.traffic_info = [[48.7231750488,-67.2655029297 ,'B1SA18BA000104'],
-                                [264.742156982,326.365142822 ,'B1SA18BA000176']]
+        if(self.map_name == "R_KR_PR_Naverlabs_Pangyo"):
+            self.traffic_info = [[555.016601562, -542.70690918, 'C119AS305185'],
+                                [48.7231750488,-67.2655029297 ,'C119AS305053'],
+                                [264.742156982,326.365142822 ,'C119AS305086']]
         else :
             self.traffic_info = [[58.50 , 1180.41, 'C119BS010001'], ## TrafficLight information
                                 [85.61,1227.88 ,'C119BS010021'],
@@ -56,9 +72,20 @@ class gen_planner():
                                 [139.39,1596.44 ,'C119BS010033']]
 
 
+        self.global_path_planner = globalPathPlanning(self.destination,self.map_name)
+        self.global_path_planner.set_ego_status(self.status_msg)
+        self.global_path = self.global_path_planner.calc_dijkstra_path() ## 출력할 경로의 이름
+        
+        if(self.op_case == "5" or self.op_case == "4"):
+            path_reader=pathReader('gen_ros') ## 경로 파일의 위치
+            self.global_path=path_reader.read_txt("op_case_5.txt")
+        
 
-
-        self.global_path=path_reader.read_txt(self.path_name+".txt") ## 출력할 경로의 이름
+        if(self.op_case == "8"):
+            path_reader=pathReader('gen_ros') ## 경로 파일의 위치
+            self.global_path=path_reader.read_txt("op_case_8.txt")
+        while(not self.is_status):
+            pass
         
 
         #class
@@ -66,8 +93,12 @@ class gen_planner():
         pid=pidController()
         self.cc=cruiseControl(0.5,1) ## cruiseControl import (object_vel_gain, object_dis_gain)
         self.vo=vaildObject(self.traffic_info) ## 장애물 유무 확인 (TrafficLight)
-        vel_planner=velocityPlanning(60/3.6,0.15) ## 속도 계획
-        vel_profile=vel_planner.curveBasedVelocity(self.global_path,100)
+        base_velocity = 60 / 3.6
+        if(self.op_case == "5" or self.op_case == "4" or self.op_case == "8"):
+            base_velocity = 36 / 3.6
+        vel_planner=velocityPlanning(base_velocity,0.15) ## 속도 계획
+        vel_profile=vel_planner.curveBasedVelocity(self.global_path,50)
+
 
 
         #time var
@@ -79,6 +110,7 @@ class gen_planner():
                 
                 ## global_path와 차량의 status_msg를 이용해 현제 waypoint와 local_path를 생성
                 local_path,self.current_waypoint=findLocalPath(self.global_path,self.status_msg)
+
                 self.vo.get_object(self.object_num,self.object_info[0],self.object_info[1],self.object_info[2],self.object_info[3])
                 global_obj,local_obj=self.vo.calc_vaild_obj([self.status_msg.position.x,self.status_msg.position.y,(self.status_msg.heading)/180*pi])
                 self.check_traffic()
@@ -104,6 +136,7 @@ class gen_planner():
 
                 cc_vel = self.cc.acc(local_obj,self.status_msg.velocity.x,vel_profile[self.current_waypoint],self.status_msg.position) ## advanced cruise control 적용한 속도 계획
                 target_velocity = cc_vel
+
   
 
                 control_input=pid.pid(target_velocity,self.status_msg.velocity) ## 속도 제어를 위한 PID 적용 (target Velocity, Status Velocity)
@@ -122,6 +155,21 @@ class gen_planner():
                 if len(local_path.poses) < 15 :
                     ctrl_msg.accel= 0
                     ctrl_msg.brake= 1
+
+
+                if(self.op_case == "5" or self.op_case == "4" or self.op_case == "8"):
+                    wait_dist = self.calc_dist_with_wp([local_path.poses[0].pose.position.x, local_path.poses[0].pose.position.y] , self.stop_over_point )
+                    print("wait_dist : ", wait_dist)
+                    if(wait_dist < 5):
+                        for npc in self.npc_msg:
+                            link_idx = self.global_path_planner.find_pos_link_idx(npc.position.x, npc.position.y, True)
+                            print(link_idx)
+                            if(check_npc_link == link_idx):
+                                print("brake")            
+                                ctrl_msg.accel= 0
+                                ctrl_msg.brake= 1
+                                break
+
 
 
                 local_path_pub.publish(local_path) ## Local Path 출력
@@ -168,6 +216,7 @@ class gen_planner():
 
     def objectInfoCB(self,data): ## Object information Subscriber
         self.object_num=data.num_of_npcs+data.num_of_obstacle+data.num_of_pedestrian
+        self.npc_msg = data.npc_list
         object_type=[]
         object_pose_x=[]
         object_pose_y=[]
@@ -207,6 +256,9 @@ class gen_planner():
                 rospy.loginfo(self.tl_msg)
                 self.is_traffic = True
 
+
+    def calc_dist_with_wp(self,pos1 , pos2):
+        return sqrt(pow(pos1[0] - pos2[0] ,2) + pow(pos1[1] - pos2[1] ,2))
         # self.is_traffic = False
     
 if __name__ == '__main__':

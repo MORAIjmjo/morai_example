@@ -106,16 +106,18 @@ class velocityPlanning :
             y_matrix=np.array(y_list)
             x_trans=x_matrix.T
             
-
-            a_matrix=np.linalg.inv(x_trans.dot(x_matrix)).dot(x_trans).dot(y_matrix)
-            a=a_matrix[0]
-            b=a_matrix[1]
-            c=a_matrix[2]
-            r=sqrt(a*a+b*b-c)
-            v_max=sqrt(r*9.8*self.road_friction)  #0.7
-            if v_max>self.car_max_speed :
-                v_max=self.car_max_speed
-            out_vel_plan.append(v_max)
+            try:
+                a_matrix=np.linalg.inv(x_trans.dot(x_matrix)).dot(x_trans).dot(y_matrix)
+                a=a_matrix[0]
+                b=a_matrix[1]
+                c=a_matrix[2]
+                r=sqrt(abs(a*a+b*b-c))
+                v_max=sqrt(r*9.8*self.road_friction)  #0.7
+                if v_max>self.car_max_speed :
+                    v_max=self.car_max_speed
+                out_vel_plan.append(v_max)
+            except np.linalg.LinAlgError:
+                out_vel_plan.append(self.car_max_speed)
 
         for i in range(len(global_path.poses)-point_num,len(global_path.poses)):
             out_vel_plan.append(self.car_max_speed)
@@ -128,9 +130,9 @@ class purePursuit : ## purePursuit 알고리즘 적용 ##
         self.forward_point=Point()
         self.current_postion=Point()
         self.is_look_forward_point=False
-        self.vehicle_length=2.8
-        self.lfd=5
-        self.min_lfd=2
+        self.vehicle_length=5.8
+        self.lfd=10 # 5
+        self.min_lfd=self.vehicle_length
         self.max_lfd=30
         self.steering=0
         
@@ -260,7 +262,7 @@ class cruiseControl: ## ACC(advanced cruise control) 적용 ##
             print("ACC ON_vehicle")   
             front_vehicle=[local_vaild_object[self.object[1]][1],local_vaild_object[self.object[1]][2],local_vaild_object[self.object[1]][3]]
             time_gap=0.8
-            default_space=5
+            default_space=13
             dis_safe=ego_vel* time_gap+default_space
             dis_rel=sqrt(pow(front_vehicle[0],2)+pow(front_vehicle[1],2))-3
             
