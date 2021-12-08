@@ -25,8 +25,14 @@ class gen_planner():
 
         if(self.op_case == "1" or self.op_case == "2"):
             self.destination = Point(603.475036621,-328.100738525,-328.100738525)
+        elif(self.op_case == "2"):
+            self.destination = Point(603.475036621,-328.100738525,-328.100738525)
+            self.stop_over_point = [584.901489258, -545.642333984]
+            check_npc_link = "6139"
         elif(self.op_case == "3"):
             self.destination = Point(814.503173828, -550.100036621, -2.99442005157)
+            self.stop_over_point = [571.456359863, -546.48034668]
+            check_npc_link = "6129"
         elif(self.op_case == "5" or self.op_case == "4"):
             self.destination =  Point(590.271972656, 413.530456543, 5.77461624146)# Point(-291.608154297, 600.307556152, 5.58355808258)
             self.stop_over_point = [619.141784668, 323.986297607]
@@ -75,6 +81,9 @@ class gen_planner():
                                 [141.02,1458.27 ,'C119BS010028'],
                                 [139.39,1596.44 ,'C119BS010033']]
 
+        while(not self.is_status):
+            pass
+        
 
         self.global_path_planner = globalPathPlanning(self.destination,self.map_name)
         self.global_path_planner.set_ego_status(self.status_msg)
@@ -88,9 +97,6 @@ class gen_planner():
         if(self.op_case == "8"):
             path_reader=pathReader('gen_ros') ## 경로 파일의 위치
             self.global_path=path_reader.read_txt("op_case_8.txt")
-        while(not self.is_status):
-            pass
-        
 
         #class
         pure_pursuit=purePursuit() ## purePursuit import
@@ -100,6 +106,8 @@ class gen_planner():
         base_velocity = 60 / 3.6
         if(self.op_case == "5" or self.op_case == "4" or self.op_case == "8"):
             base_velocity = 36 / 3.6
+        if(self.op_case == "3" or self.op_case == "2" ):
+            base_velocity = 60 / 3.6
 
         vel_planner=velocityPlanning(base_velocity,0.15) ## 속도 계획
         vel_profile=vel_planner.curveBasedVelocity(self.global_path,50)
@@ -162,14 +170,14 @@ class gen_planner():
                     ctrl_msg.brake= 1
 
 
-                if(self.op_case == "5" or self.op_case == "4" or self.op_case == "8"):
+                if(self.op_case == "3" or self.op_case == "5" or self.op_case == "4" or self.op_case == "8"):
                     wait_dist = self.calc_dist_with_wp([local_path.poses[0].pose.position.x, local_path.poses[0].pose.position.y] , self.stop_over_point )
                     print("wait_dist : ", wait_dist)
-                    if(wait_dist < 5):
+                    if(wait_dist < 5 or ((self.op_case == "3" or self.op_case == "2") and wait_dist < 10)):
                         for npc in self.npc_msg:
-                            link_idx = self.global_path_planner.find_pos_link_idx(npc.position.x, npc.position.y, True)
-                            print(link_idx)
-                            if(check_npc_link == link_idx):
+                            # link_idx = self.global_path_planner.find_pos_link_idx(npc.position.x, npc.position.y, True)
+                            # print(link_idx)
+                            if (self.global_path_planner.is_near_link_idx(npc.position.x, npc.position.y, check_npc_link)):# (check_npc_link):
                                 print("brake")            
                                 ctrl_msg.accel= 0
                                 ctrl_msg.brake= 1

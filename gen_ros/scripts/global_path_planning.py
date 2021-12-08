@@ -112,6 +112,21 @@ class globalPathPlanning :
                     pos_idx = link_idx        
         
         return pos_idx
+    
+    def is_near_link_idx (self,pos_x,pos_y,link_idx):
+
+        for link_point in self.links[link_idx].points:                
+            x = link_point[0]
+            y = link_point[1]
+
+            dx = pos_x - x
+            dy = pos_y - y
+
+            dist = sqrt(pow(dx,2)+pow(dy,2))         
+            if dist < 1:
+                return True
+        return False
+
     def calc_simple_global_path(self):
         x = self.x
         y = self.y
