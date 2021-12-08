@@ -25,6 +25,8 @@ class gen_planner():
 
         if(self.op_case == "1" or self.op_case == "2"):
             self.destination = Point(603.475036621,-328.100738525,-328.100738525)
+        elif(self.op_case == "3"):
+            self.destination = Point(814.503173828, -550.100036621, -2.99442005157)
         elif(self.op_case == "5" or self.op_case == "4"):
             self.destination =  Point(590.271972656, 413.530456543, 5.77461624146)# Point(-291.608154297, 600.307556152, 5.58355808258)
             self.stop_over_point = [619.141784668, 323.986297607]
@@ -35,6 +37,8 @@ class gen_planner():
             self.destination = Point(615.366333008, -270.371154785, -2.64361953735)
             self.stop_over_point = [615.672119141, -430.026550293]
             check_npc_link = "5371"
+        elif(self.op_case == "9"):
+            self.destination = Point(581.772705078, -773.739135742, 1.8105700016)
 
         #publisher
         global_path_pub= rospy.Publisher('/global_path',Path, queue_size=1) ## global_path publisher
@@ -96,6 +100,7 @@ class gen_planner():
         base_velocity = 60 / 3.6
         if(self.op_case == "5" or self.op_case == "4" or self.op_case == "8"):
             base_velocity = 36 / 3.6
+
         vel_planner=velocityPlanning(base_velocity,0.15) ## 속도 계획
         vel_profile=vel_planner.curveBasedVelocity(self.global_path,50)
 

@@ -23,8 +23,8 @@ class gen_planner():
         self.op_case = arg[1]
         self.traffic_control=arg[2]
 
-        if(self.op_case == "3"):
-            self.destination = Point(588.260437012,-770.3828125,0.174472808838)
+        if(self.op_case == "9"):
+            self.destination = Point(581.772705078, -773.739135742, 1.8105700016)
 
         #publisher
         ctrl_pub = rospy.Publisher('/ego_2/ctrl_cmd',CtrlCmd, queue_size=1) ## Vehicl Control
@@ -40,8 +40,10 @@ class gen_planner():
         self.is_traffic=False ## 신호등 상태 점검
         self.ego_status=False
 
-        while(not self.is_status or not self.ego_status):
-            pass
+        while not rospy.is_shutdown():
+            print(self.is_status==True , self.ego_status == True)
+            if self.is_status==True and self.ego_status == True:
+                break
         
 
         #time var
@@ -51,18 +53,8 @@ class gen_planner():
         self.global_path_planner = globalPathPlanning(self.destination,self.map_name)
         self.global_path_planner.set_ego_status(self.status_msg)
         self.global_path = self.global_path_planner.calc_dijkstra_path() ## 출력할 경로의 이름
-        
-        ego_local_dist = self.local_of_me(self.ego_msg, Point(566.443237305, -546.3179321291,-1.26130819321 ))
-        while not rospy.is_shutdown() :
-            if(ego_local_dist > 0):
-                ego_local_dist = self.local_of_me(self.ego_msg,Point(566.443237305, -546.3179321291,-1.26130819321 ))
-                ctrl_msg.accel= 0
-                ctrl_msg.brake= 1
-                ctrl_pub.publish(ctrl_msg) ## Vehicl Control 출력
-                print(ego_local_dist)
-                rate.sleep()
-            else:
-                break
+
+        self.ego_vel_toggle = [-1 , 0.0]
         
 
         #class
@@ -98,6 +90,15 @@ class gen_planner():
                     ctrl_msg.accel= 0
                     ctrl_msg.brake= 1
 
+                if(self.ego_vel_toggle[0] == -1 and self.ego_msg.velocity.x > 5 ):
+                    self.ego_vel_toggle[1] = time.time()
+                    self.ego_vel_toggle[0] = 0
+                if(self.ego_vel_toggle[0] == 0 and time.time() - self.ego_vel_toggle[1] > 2):
+                    self.ego_vel_toggle[0] = 1
+                    self.ego_vel_toggle[1] = time.time()
+                if(self.ego_vel_toggle[0] == 1 and time.time() - self.ego_vel_toggle[1] < 4):
+                    ctrl_msg.accel= 0
+                    ctrl_msg.brake= 1
                 ctrl_pub.publish(ctrl_msg) ## Vehicl Control 출력
                 
                 if count==30 : ## global path 출력
@@ -111,12 +112,6 @@ class gen_planner():
 
     def statusCB(self,data): ## Vehicle Status Subscriber 
         self.status_msg=data
-        # br = tf.TransformBroadcaster()
-        # br.sendTransform((self.status_msg.position.x, self.status_msg.position.y, self.status_msg.position.z),
-        #                 tf.transformations.quaternion_from_euler(0, 0, (self.status_msg.heading)/180*pi),
-        #                 rospy.Time.now(),
-        #                 "gps",
-        #                 "map")
         self.is_status=True
 
     def egoCB(self,data): ## Vehicle Status Subscriber 
@@ -126,18 +121,6 @@ class gen_planner():
     def calc_dist(self, tl):
         return sqrt(pow(self.status_msg.position.x - tl[0] ,2) + pow(self.status_msg.position.y - tl[1] ,2) )
     
-    def check_traffic(self):
-        for tl in self.traffic_info:
-            if(self.calc_dist(tl) < 20):
-                req_idx = MoraiTLIndex()
-                req_idx.idx = tl[2]
-                tl_info_resp = self.tl_info_srv(req_idx)
-                self.tl_msg=GetTrafficLightStatus()
-                self.tl_msg.trafficLightIndex = tl_info_resp.response.idx
-                self.tl_msg.trafficLightStatus = tl_info_resp.response.status
-                rospy.loginfo(self.tl_msg)
-                self.is_traffic = True
-
 
     def calc_dist_with_wp(self,pos1 , pos2):
         return sqrt(pow(pos1[0] - pos2[0] ,2) + pow(pos1[1] - pos2[1] ,2))
