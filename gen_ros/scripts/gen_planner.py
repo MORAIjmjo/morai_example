@@ -23,10 +23,10 @@ class gen_planner():
         self.op_case = arg[1]
         self.traffic_control=arg[2]
 
-        if(self.op_case == "1" or self.op_case == "2"):
-            self.destination = Point(603.475036621,-328.100738525,-328.100738525)
+        if(self.op_case == "1"):
+            self.destination = Point(605.714904785,-430.723876953,-2.04169845581)
         elif(self.op_case == "2"):
-            self.destination = Point(603.475036621,-328.100738525,-328.100738525)
+            self.destination = Point(608.984741211,-431.287658691,-2.07680082321)
             self.stop_over_point = [584.901489258, -545.642333984]
             check_npc_link = "6139"
         elif(self.op_case == "3"):
@@ -170,10 +170,10 @@ class gen_planner():
                     ctrl_msg.brake= 1
 
 
-                if(self.op_case == "3" or self.op_case == "5" or self.op_case == "4" or self.op_case == "8"):
+                if(self.op_case == "2" or self.op_case == "3" or self.op_case == "5" or self.op_case == "4" or self.op_case == "8"):
                     wait_dist = self.calc_dist_with_wp([local_path.poses[0].pose.position.x, local_path.poses[0].pose.position.y] , self.stop_over_point )
                     print("wait_dist : ", wait_dist)
-                    if(wait_dist < 5 or ((self.op_case == "3" or self.op_case == "2") and wait_dist < 10)):
+                    if(wait_dist < 5 or ((self.op_case == "8" or self.op_case == "3" or self.op_case == "2") and wait_dist < 10)):
                         for npc in self.npc_msg:
                             # link_idx = self.global_path_planner.find_pos_link_idx(npc.position.x, npc.position.y, True)
                             # print(link_idx)
